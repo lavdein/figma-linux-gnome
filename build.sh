@@ -663,23 +663,38 @@ EOFENTRY
 		sed -i 's/titleBarStyle:"hidden"/titleBarStyle:"default"/g' "$main_js"
 		echo "Patched $main_js for native frames"
 
-		# ---- Patch openFile to allow duplicate tabs (with tray toggle) ----
-		# Adds a global flag + tray menu checkbox so users can toggle whether
-		# clicking an already-open file creates a new tab or focuses the existing one.
-		echo 'Patching openFile IPC for duplicate tabs with tray toggle...'
+		# ---- Patch openFile to allow duplicate tabs (with tray toggle + persistent state) ----
+		# Adds a toggle to tray menu that persists across restarts using Figma's
+		# built-in settings system (H() to read, Me() to write).
+		echo 'Patching openFile IPC for duplicate tabs with persistent tray toggle...'
 		node -e "
 const fs = require('fs');
 let code = fs.readFileSync('$main_js', 'utf8');
 let patched = 0;
 
-// 1) Inject global flag at the very beginning of main.js
-code = 'var __allowDuplicateTab=false;' + code;
-patched++;
+// 1) Add allowDuplicateTabs:!1 to the default state object (next to showFigmaInMenuBar:!0)
+const oldState = 'showFigmaInMenuBar:!0';
+const newState = 'showFigmaInMenuBar:!0,allowDuplicateTabs:!1';
+if (code.includes(oldState)) {
+  code = code.replace(oldState, newState);
+  patched++;
+} else {
+  console.error('Warning: default state pattern not found');
+}
 
-// 2) Patch openFileTab default parameter: allowDuplicateTab:W=!1 -> allowDuplicateTab:W=__allowDuplicateTab
-//    This changes the default value for ALL callers (Home, Starred, Recents, etc.)
+// 2) Add state restore validation (next to showFigmaInMenuBar restore)
+const oldRestore = '\"showFigmaInMenuBar\"in n&&typeof n.showFigmaInMenuBar==\"boolean\"&&(We.showFigmaInMenuBar=n.showFigmaInMenuBar)';
+const newRestore = '\"showFigmaInMenuBar\"in n&&typeof n.showFigmaInMenuBar==\"boolean\"&&(We.showFigmaInMenuBar=n.showFigmaInMenuBar),\"allowDuplicateTabs\"in n&&typeof n.allowDuplicateTabs==\"boolean\"&&(We.allowDuplicateTabs=n.allowDuplicateTabs)';
+if (code.includes(oldRestore)) {
+  code = code.replace(oldRestore, newRestore);
+  patched++;
+} else {
+  console.error('Warning: state restore pattern not found');
+}
+
+// 3) Patch openFileTab default parameter to read from persistent state
 const oldDefault = 'allowDuplicateTab:W=!1';
-const newDefault = 'allowDuplicateTab:W=__allowDuplicateTab';
+const newDefault = 'allowDuplicateTab:W=(typeof H===\"function\"?H().allowDuplicateTabs:!1)';
 if (code.includes(oldDefault)) {
   code = code.replace(oldDefault, newDefault);
   patched++;
@@ -687,9 +702,9 @@ if (code.includes(oldDefault)) {
   console.error('Warning: openFileTab default parameter pattern not found');
 }
 
-// 3) Add toggle checkbox to tray context menu (after FR() which is Show Figma in System Tray)
+// 4) Add toggle checkbox to tray context menu using persistent state
 const oldTray = 'NP(),WP(),FR(),GP({inTrayContextMenu:!0})';
-const newTray = 'NP(),WP(),FR(),{label:\"Allow Duplicate Tabs\",type:\"checkbox\",checked:__allowDuplicateTab,click(n){__allowDuplicateTab=n.checked}},GP({inTrayContextMenu:!0})';
+const newTray = 'NP(),WP(),FR(),{label:\"Allow Duplicate Tabs\",type:\"checkbox\",checked:H().allowDuplicateTabs,click(n){Me({allowDuplicateTabs:n.checked})}},GP({inTrayContextMenu:!0})';
 if (code.includes(oldTray)) {
   code = code.replace(oldTray, newTray);
   patched++;
@@ -698,8 +713,19 @@ if (code.includes(oldTray)) {
 }
 
 fs.writeFileSync('$main_js', code);
-console.log('Duplicate tabs patch applied (' + patched + '/3 patches)');
+console.log('Duplicate tabs patch applied (' + patched + '/4 patches)');
 "
+
+		# ---- Enable Windows-style app menu popup on Linux ----
+		# The dropdown menu button in the tab bar calls getWindowsAppMenu().popup(),
+		# but windowsAppMenu is only built when process.platform==="win32".
+		# Remove the platform gate so the menu is also built on Linux.
+		sed -i 's|process.platform==="win32"&&(this.windowsAppMenu=|process.platform!=="darwin"\&\&(this.windowsAppMenu=|' "$main_js"
+		if grep -q 'process.platform!=="darwin"&&(this.windowsAppMenu=' "$main_js"; then
+			echo "Patched $main_js: app menu popup enabled on Linux"
+		else
+			echo "Warning: app menu popup patch did not match in $main_js"
+		fi
 	fi
 
 	# Also patch desktop_shell.js if it has BrowserWindow references
@@ -707,7 +733,32 @@ console.log('Duplicate tabs patch applied (' + patched + '/3 patches)');
 	if [[ -f $shell_js ]]; then
 		sed -i 's/frame:!1/frame:true/g' "$shell_js"
 		sed -i 's/frame:!0/frame:true/g' "$shell_js"
+
+		# Show the app menu dropdown button on Linux (normally Windows-only).
+		# The caption container (menu + minimize/maximize/close) is gated behind
+		# a tS="win32"===e.platform check. We force render it, then hide the
+		# window control buttons via CSS — keeping only the menu dropdown.
+		sed -i 's|i=tS&&(0,p.jsx)(em|i=!0\&\&(0,p.jsx)(em|' "$shell_js"
+		if grep -q 'i=!0&&(0,p.jsx)(em' "$shell_js"; then
+			echo "Patched $shell_js: app menu button enabled on Linux"
+		else
+			echo "Warning: app menu button patch did not match in $shell_js"
+		fi
+
 		echo "Patched $shell_js"
+	fi
+
+	# Inject CSS to hide Windows caption buttons (minimize/maximize/close)
+	# but keep the app menu dropdown button visible on Linux
+	local shell_html='app.asar.contents/shell.html'
+	if [[ -f $shell_html ]]; then
+		sed -i 's|</head>|<style>\
+#__MINIMIZE_CAPTION_BUTTON__,\
+#__MAXIMIZE_CAPTION_BUTTON__,\
+#__CLOSE_CAPTION_BUTTON__ { display: none !important; }\
+</style>\
+</head>|' "$shell_html"
+		echo "Patched $shell_html: hidden Windows caption buttons via CSS"
 	fi
 
 	# ---- Update package.json ----
