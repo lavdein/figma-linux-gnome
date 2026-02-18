@@ -712,8 +712,18 @@ if (code.includes(oldTray)) {
   console.error('Warning: tray menu pattern not found');
 }
 
+// 5) Add toggle to Preferences menu (same as tray, accessible via menu bar)
+const oldPrefs = 'function PR(){let n=[FR()]';
+const newPrefs = 'function PR(){let n=[FR(),{label:\"Allow Duplicate Tabs\",type:\"checkbox\",checked:H().allowDuplicateTabs,click(n){Me({allowDuplicateTabs:n.checked})}}]';
+if (code.includes(oldPrefs)) {
+  code = code.replace(oldPrefs, newPrefs);
+  patched++;
+} else {
+  console.error('Warning: Preferences menu pattern not found');
+}
+
 fs.writeFileSync('$main_js', code);
-console.log('Duplicate tabs patch applied (' + patched + '/4 patches)');
+console.log('Duplicate tabs patch applied (' + patched + '/5 patches)');
 "
 
 		# ---- Enable Windows-style app menu popup on Linux ----
