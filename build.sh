@@ -662,6 +662,43 @@ EOFENTRY
 		# Remove titleBarStyle:"hidden"
 		sed -i 's/titleBarStyle:"hidden"/titleBarStyle:"default"/g' "$main_js"
 		echo "Patched $main_js for native frames"
+
+		# ---- Patch openFile to allow duplicate tabs (with tray toggle) ----
+		# Adds a global flag + tray menu checkbox so users can toggle whether
+		# clicking an already-open file creates a new tab or focuses the existing one.
+		echo 'Patching openFile IPC for duplicate tabs with tray toggle...'
+		node -e "
+const fs = require('fs');
+let code = fs.readFileSync('$main_js', 'utf8');
+let patched = 0;
+
+// 1) Inject global flag at the very beginning of main.js
+code = 'var __allowDuplicateTab=false;' + code;
+patched++;
+
+// 2) Patch openFile IPC handler to use the global flag
+const oldOpen = 'loggingSource:\"ipc-open-file\"})';
+const newOpen = 'loggingSource:\"ipc-open-file\",allowDuplicateTab:__allowDuplicateTab})';
+if (code.includes(oldOpen)) {
+  code = code.replace(oldOpen, newOpen);
+  patched++;
+} else {
+  console.error('Warning: openFile IPC pattern not found');
+}
+
+// 3) Add toggle checkbox to tray context menu (after FR() which is Show Figma in System Tray)
+const oldTray = 'NP(),WP(),FR(),GP({inTrayContextMenu:!0})';
+const newTray = 'NP(),WP(),FR(),{label:\"Allow Duplicate Tabs\",type:\"checkbox\",checked:__allowDuplicateTab,click(n){__allowDuplicateTab=n.checked}},GP({inTrayContextMenu:!0})';
+if (code.includes(oldTray)) {
+  code = code.replace(oldTray, newTray);
+  patched++;
+} else {
+  console.error('Warning: tray menu pattern not found');
+}
+
+fs.writeFileSync('$main_js', code);
+console.log('Duplicate tabs patch applied (' + patched + '/3 patches)');
+"
 	fi
 
 	# Also patch desktop_shell.js if it has BrowserWindow references
