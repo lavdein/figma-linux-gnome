@@ -19,6 +19,7 @@ Every other "Figma for Linux" project is just a browser window pretending to be 
 | Figma i18n locales (7 languages) | Yes | No |
 | Desktop notifications | Yes | Browser-level |
 | Auto desktop integration | Yes | Manual |
+| Allow duplicate tabs (same file in multiple tabs) | Yes | No |
 
 ## How It Works
 
@@ -142,6 +143,18 @@ The launcher handles both X11 and Wayland:
 FIGMA_USE_WAYLAND=1 ./figma-desktop-*.AppImage
 ```
 
+## Extra Features
+
+This build includes enhancements not available in the official Figma Desktop client:
+
+### Allow Duplicate Tabs
+
+In the official Figma client, clicking a file that's already open simply switches to the existing tab — there's no way to open the same file in two tabs side by side. This build adds a **"Allow Duplicate Tabs"** toggle in the system tray menu.
+
+**How to use:** Right-click the Figma icon in the system tray and check **"Allow Duplicate Tabs"**. Now clicking any file (from Home, Starred, Recents, or anywhere) will always open it in a new tab, even if it's already open. Uncheck to restore the default behavior.
+
+This is useful when you need to view different pages or sections of the same file simultaneously.
+
 ## Debugging
 
 Logs are written to `~/.cache/figma-desktop-linux/launcher.log`.
@@ -191,6 +204,7 @@ figma-desktop-linux/
 - **`require("./desktop_rust.node")`** redirected to stub
 - **`handleCommandLineArgs`** rewritten to scan all argv entries (Linux passes CLI flags before the app path)
 - **`package.json` main entry** updated to load `frame-fix-wrapper.js` before the original entry point
+- **`openFileTab` default parameter** patched to support the "Allow Duplicate Tabs" toggle via system tray
 
 ## Known Limitations
 

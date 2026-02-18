@@ -676,14 +676,15 @@ let patched = 0;
 code = 'var __allowDuplicateTab=false;' + code;
 patched++;
 
-// 2) Patch openFile IPC handler to use the global flag
-const oldOpen = 'loggingSource:\"ipc-open-file\"})';
-const newOpen = 'loggingSource:\"ipc-open-file\",allowDuplicateTab:__allowDuplicateTab})';
-if (code.includes(oldOpen)) {
-  code = code.replace(oldOpen, newOpen);
+// 2) Patch openFileTab default parameter: allowDuplicateTab:W=!1 -> allowDuplicateTab:W=__allowDuplicateTab
+//    This changes the default value for ALL callers (Home, Starred, Recents, etc.)
+const oldDefault = 'allowDuplicateTab:W=!1';
+const newDefault = 'allowDuplicateTab:W=__allowDuplicateTab';
+if (code.includes(oldDefault)) {
+  code = code.replace(oldDefault, newDefault);
   patched++;
 } else {
-  console.error('Warning: openFile IPC pattern not found');
+  console.error('Warning: openFileTab default parameter pattern not found');
 }
 
 // 3) Add toggle checkbox to tray context menu (after FR() which is Show Figma in System Tray)
