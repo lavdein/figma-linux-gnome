@@ -154,6 +154,19 @@ FIGMA_DEBUG=1 ./figma-desktop-*.AppImage
 make run-debug
 ```
 
+Setting `FIGMA_DEBUG=1` enables verbose logging to stdout and automatically opens DevTools for the tray notification window (Feed).
+
+### Developer Tools Shortcuts
+
+Figma Desktop includes built-in DevTools accessible via keyboard shortcuts (menu bar: **Help → Troubleshooting**):
+
+| Shortcut | What it opens |
+|---|---|
+| `Ctrl+Alt+I` | DevTools for the **active tab** (editor, files — main Figma content) |
+| `Shift+Ctrl+Alt+I` | DevTools for the **shell** (window frame, tab bar, sidebar) |
+
+> **Tip:** The menu bar is hidden by default. Press `Alt` to toggle it and access **Help → Troubleshooting** for additional debug options including saving debug info, network logs, and performance logs.
+
 ## Architecture
 
 ```
