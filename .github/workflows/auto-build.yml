@@ -1,0 +1,92 @@
+name: Auto-build Figma Desktop for Linux
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  check-and-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y \
+            p7zip-full nodejs npm imagemagick wget curl binutils rpm fakeroot dpkg-dev
+
+      - name: Get latest Figma version
+        id: figma
+        run: |
+          RELEASES=$(curl -s -L -H 'User-Agent: Figma/1 (Windows; x64)' \
+            "https://desktop.figma.com/win/RELEASES")
+          NUPKG=$(echo "$RELEASES" | awk '{print $2}')
+          VERSION=$(echo "$NUPKG" | sed 's/Figma-\(.*\)-full\.nupkg/\1/')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Figma latest version: $VERSION"
+
+      - name: Get last built version
+        id: built
+        run: |
+          LATEST=$(curl -s \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/latest" \
+            | jq -r '.tag_name // "none"')
+          echo "version=$LATEST" >> "$GITHUB_OUTPUT"
+          echo "Last built version: $LATEST"
+
+      - name: Check if new build is needed
+        id: check
+        run: |
+          FIGMA_VER="${{ steps.figma.outputs.version }}"
+          BUILT_VER="${{ steps.built.outputs.version }}"
+          if [ "$FIGMA_VER" = "$BUILT_VER" ]; then
+            echo "Already up to date ($FIGMA_VER). Skipping build."
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "New version! Figma=$FIGMA_VER vs Built=$BUILT_VER"
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build AppImage
+        if: steps.check.outputs.needed == 'true'
+        run: chmod +x build.sh && ./build.sh --build appimage --clean no
+
+      - name: Build .deb package
+        if: steps.check.outputs.needed == 'true'
+        run: ./build.sh --build deb --clean no
+
+      - name: Build .rpm package
+        if: steps.check.outputs.needed == 'true'
+        run: ./build.sh --build rpm --clean no
+
+      - name: Create GitHub Release
+        if: steps.check.outputs.needed == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.figma.outputs.version }}
+          name: "Figma Desktop v${{ steps.figma.outputs.version }}"
+          body: |
+            🤖 Automated build of **Figma Desktop v${{ steps.figma.outputs.version }}** for Linux.
+
+            ### Download
+            | Package | Format | Distros |
+            |---------|--------|---------|
+            | `figma-desktop-*.AppImage` | AppImage | Universal |
+            | `figma-desktop_*.deb` | Debian package | Ubuntu, Debian, Mint |
+            | `figma-desktop-*.rpm` | RPM package | Fedora, RHEL, openSUSE |
+
+            > Built automatically from [IliyaBrook/figma-linux](https://github.com/IliyaBrook/figma-linux).
+            > Figma Desktop is proprietary software of Figma, Inc.
+          files: |
+            figma-desktop-*.AppImage
+            figma-desktop_*.deb
+            figma-desktop-*.rpm
+          fail_on_unmatched_files: false
