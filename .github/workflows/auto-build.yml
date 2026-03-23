@@ -10,7 +10,9 @@ permissions:
 
 jobs:
   check-and-build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
+    env:
+      APPIMAGE_EXTRACT_AND_RUN: "1"
 
     steps:
       - name: Checkout repository
@@ -20,7 +22,10 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y \
-            p7zip-full nodejs npm imagemagick wget curl binutils rpm fakeroot dpkg-dev libfuse2
+            p7zip-full nodejs npm imagemagick wget curl binutils rpm fakeroot dpkg-dev
+          sudo apt-get install -y libfuse2 libfuse2t64 2>/dev/null || \
+          sudo apt-get install -y libfuse2 2>/dev/null || \
+          sudo apt-get install -y libfuse2t64 2>/dev/null || true
 
       - name: Get latest Figma version
         id: figma
@@ -57,8 +62,6 @@ jobs:
 
       - name: Build AppImage
         if: steps.check.outputs.needed == 'true'
-        env:
-          APPIMAGE_EXTRACT_AND_RUN: 1
         run: chmod +x build.sh && ./build.sh --build appimage --clean no
 
       - name: Build .deb package
