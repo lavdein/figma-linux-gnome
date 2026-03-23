@@ -29,12 +29,13 @@ jobs:
       - name: Get latest Figma version
         id: figma
         run: |
-          RELEASES=$(curl -s -L -H 'User-Agent: Figma/1 (Windows; x64)' \
-            "https://desktop.figma.com/win/RELEASES")
-          NUPKG=$(echo "$RELEASES" | awk '{print $2}')
-          VERSION=$(echo "$NUPKG" | sed 's/Figma-\(.*\)-full\.nupkg/\1/')
+          # Read version from first 2MB of the actual installer (more reliable than RELEASES manifest)
+          EXE_NUPKG=$(curl -s -L -H 'User-Agent: Figma/1 (Windows; x64)' \
+            -r 0-2097151 "https://desktop.figma.com/win/FigmaSetup.exe" \
+            | strings | grep -oP 'Figma-[\d.]+-full\.nupkg' | head -1)
+          VERSION=$(echo "$EXE_NUPKG" | sed 's/Figma-\(.*\)-full\.nupkg/\1/')
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Figma latest version: $VERSION"
+          echo "Figma installer version: $VERSION"
 
       - name: Get last built version
         id: built
@@ -71,14 +72,27 @@ jobs:
         if: steps.check.outputs.needed == 'true'
         run: ./build.sh --build rpm --clean no
 
+      - name: Detect actual built version
+        if: steps.check.outputs.needed == 'true'
+        id: actual
+        run: |
+          APPIMAGE=$(ls figma-desktop-*.AppImage 2>/dev/null | head -1)
+          if [ -n "$APPIMAGE" ]; then
+            VERSION=$(echo "$APPIMAGE" | grep -oP '[\d.]+(?=-amd64)' | head -1)
+          else
+            VERSION="${{ steps.figma.outputs.version }}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Actual built version: $VERSION"
+
       - name: Create GitHub Release
         if: steps.check.outputs.needed == 'true'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.figma.outputs.version }}
-          name: "Figma Desktop v${{ steps.figma.outputs.version }}"
+          tag_name: ${{ steps.actual.outputs.version }}
+          name: "Figma Desktop v${{ steps.actual.outputs.version }}"
           body: |
-            🤖 Automated build of **Figma Desktop v${{ steps.figma.outputs.version }}** for Linux.
+            🤖 Automated build of **Figma Desktop v${{ steps.actual.outputs.version }}** for Linux.
 
             ### Download
             | Package | Format | Distros |
