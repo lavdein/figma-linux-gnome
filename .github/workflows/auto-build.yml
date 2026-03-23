@@ -22,10 +22,9 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y \
-            p7zip-full nodejs npm imagemagick wget curl binutils rpm fakeroot dpkg-dev
-          sudo apt-get install -y libfuse2 libfuse2t64 2>/dev/null || \
-          sudo apt-get install -y libfuse2 2>/dev/null || \
-          sudo apt-get install -y libfuse2t64 2>/dev/null || true
+            p7zip-full nodejs npm imagemagick wget curl binutils rpm fakeroot dpkg-dev \
+            fuse libfuse2
+          sudo modprobe fuse
 
       - name: Get latest Figma version
         id: figma
