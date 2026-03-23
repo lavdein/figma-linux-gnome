@@ -20,7 +20,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y \
-            p7zip-full nodejs npm imagemagick wget curl binutils rpm fakeroot dpkg-dev
+            p7zip-full nodejs npm imagemagick wget curl binutils rpm fakeroot dpkg-dev libfuse2
 
       - name: Get latest Figma version
         id: figma
@@ -57,6 +57,8 @@ jobs:
 
       - name: Build AppImage
         if: steps.check.outputs.needed == 'true'
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: 1
         run: chmod +x build.sh && ./build.sh --build appimage --clean no
 
       - name: Build .deb package
