@@ -1,0 +1,110 @@
+name: Auto-build Figma Desktop for Linux
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  check-and-build:
+    runs-on: ubuntu-22.04
+    env:
+      APPIMAGE_EXTRACT_AND_RUN: "1"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y \
+            p7zip-full nodejs npm imagemagick wget curl binutils rpm fakeroot dpkg-dev \
+            fuse libfuse2
+          sudo modprobe fuse
+
+      - name: Get latest Figma version
+        id: figma
+        run: |
+          # Read version from first 2MB of the actual installer (more reliable than RELEASES manifest)
+          EXE_NUPKG=$(curl -s -L -H 'User-Agent: Figma/1 (Windows; x64)' \
+            -r 0-2097151 "https://desktop.figma.com/win/FigmaSetup.exe" \
+            | strings | grep -oP 'Figma-[\d.]+-full\.nupkg' | head -1)
+          VERSION=$(echo "$EXE_NUPKG" | sed 's/Figma-\(.*\)-full\.nupkg/\1/')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Figma installer version: $VERSION"
+
+      - name: Get last built version
+        id: built
+        run: |
+          LATEST=$(curl -s \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/latest" \
+            | jq -r '.tag_name // "none"')
+          echo "version=$LATEST" >> "$GITHUB_OUTPUT"
+          echo "Last built version: $LATEST"
+
+      - name: Check if new build is needed
+        id: check
+        run: |
+          FIGMA_VER="${{ steps.figma.outputs.version }}"
+          BUILT_VER="${{ steps.built.outputs.version }}"
+          if [ "$FIGMA_VER" = "$BUILT_VER" ]; then
+            echo "Already up to date ($FIGMA_VER). Skipping build."
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "New version! Figma=$FIGMA_VER vs Built=$BUILT_VER"
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build AppImage
+        if: steps.check.outputs.needed == 'true'
+        run: chmod +x build.sh && ./build.sh --build appimage --clean no
+
+      - name: Build .deb package
+        if: steps.check.outputs.needed == 'true'
+        run: ./build.sh --build deb --clean no
+
+      - name: Build .rpm package
+        if: steps.check.outputs.needed == 'true'
+        run: ./build.sh --build rpm --clean no
+
+      - name: Detect actual built version
+        if: steps.check.outputs.needed == 'true'
+        id: actual
+        run: |
+          APPIMAGE=$(ls figma-desktop-*.AppImage 2>/dev/null | head -1)
+          if [ -n "$APPIMAGE" ]; then
+            VERSION=$(echo "$APPIMAGE" | grep -oP '[\d.]+(?=-amd64)' | head -1)
+          else
+            VERSION="${{ steps.figma.outputs.version }}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Actual built version: $VERSION"
+
+      - name: Create GitHub Release
+        if: steps.check.outputs.needed == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.actual.outputs.version }}
+          name: "Figma Desktop v${{ steps.actual.outputs.version }}"
+          body: |
+            🤖 Automated build of **Figma Desktop v${{ steps.actual.outputs.version }}** for Linux.
+
+            ### Download
+            | Package | Format | Distros |
+            |---------|--------|---------|
+            | `figma-desktop-*.AppImage` | AppImage | Universal |
+            | `figma-desktop_*.deb` | Debian package | Ubuntu, Debian, Mint |
+            | `figma-desktop-*.rpm` | RPM package | Fedora, RHEL, openSUSE |
+
+            > Built automatically from [IliyaBrook/figma-linux](https://github.com/IliyaBrook/figma-linux).
+            > Figma Desktop is proprietary software of Figma, Inc.
+          files: |
+            figma-desktop-*.AppImage
+            figma-desktop_*.deb
+            figma-desktop-*.rpm
+          fail_on_unmatched_files: false

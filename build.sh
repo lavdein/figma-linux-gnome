@@ -650,18 +650,11 @@ require('./${original_main}');
 EOFENTRY
 
 	# ---- Patch BrowserWindow creation in main.js ----
-	echo 'Patching BrowserWindow creation for native frames...'
+	# NOTE: frame and titleBarStyle are handled at runtime by frame-fix-wrapper.js
+	# based on FIGMA_USE_NATIVE_FRAME env var. No build-time patching needed.
+	echo 'Skipping build-time frame patches (handled at runtime by frame-fix-wrapper.js)'
 	local main_js='app.asar.contents/main.js'
 	if [[ -f $main_js ]]; then
-		# frame:!1 -> frame:true (minified false)
-		sed -i 's/frame:!1/frame:true/g' "$main_js"
-		# frame:!0 -> frame:true (minified true with NOT, i.e. false)
-		sed -i 's/frame:!0/frame:true/g' "$main_js"
-		# frame:false -> frame:true
-		sed -i 's/frame[[:space:]]*:[[:space:]]*false/frame:true/g' "$main_js"
-		# Remove titleBarStyle:"hidden"
-		sed -i 's/titleBarStyle:"hidden"/titleBarStyle:"default"/g' "$main_js"
-		echo "Patched $main_js for native frames"
 
 		# ---- Patch openFile to allow duplicate tabs (with tray toggle + persistent state) ----
 		# Adds a toggle to tray menu that persists across restarts using Figma's
@@ -738,38 +731,45 @@ console.log('Duplicate tabs patch applied (' + patched + '/5 patches)');
 		fi
 	fi
 
-	# Also patch desktop_shell.js if it has BrowserWindow references
+	# Patch desktop_shell.js: enable caption buttons (app menu + close/min/max) on Linux.
+	# Figma gates the entire caption container behind a win32 platform check.
+	# We find that platform variable dynamically (variable names change per Figma release)
+	# and replace the gate with a literal true so the buttons always render on Linux.
 	local shell_js='app.asar.contents/desktop_shell.js'
 	if [[ -f $shell_js ]]; then
-		sed -i 's/frame:!1/frame:true/g' "$shell_js"
-		sed -i 's/frame:!0/frame:true/g' "$shell_js"
+		node -e "
+const fs = require('fs');
+let code = fs.readFileSync('$shell_js', 'utf8');
 
-		# Show the app menu dropdown button on Linux (normally Windows-only).
-		# The caption container (menu + minimize/maximize/close) is gated behind
-		# a tS="win32"===e.platform check. We force render it, then hide the
-		# window control buttons via CSS — keeping only the menu dropdown.
-		sed -i 's|i=tS&&(0,p.jsx)(em|i=!0\&\&(0,p.jsx)(em|' "$shell_js"
-		if grep -q 'i=!0&&(0,p.jsx)(em' "$shell_js"; then
-			echo "Patched $shell_js: app menu button enabled on Linux"
-		else
-			echo "Warning: app menu button patch did not match in $shell_js"
-		fi
+// Step 1: find the variable that holds the win32 platform check.
+// Minified Figma uses patterns like: tS='win32'===e.platform
+const platformVarMatch = code.match(/(\w+)=[\"']win32[\"']===\w+\.platform/);
+if (!platformVarMatch) {
+  console.error('Warning: win32 platform variable not found in desktop_shell.js');
+  console.error('Caption buttons (app menu, close/min/max) may not appear on Linux');
+  process.exit(0);
+}
+const platformVar = platformVarMatch[1];
+console.log('Found platform variable: ' + platformVar);
 
+// Step 2: replace all uses of that variable as a boolean gate before JSX/createElement.
+// Patterns: VAR&&(0,x.jsx)(... or VAR&&(0,x.createElement)(...
+const gateRe = new RegExp('(\\\\w+=)' + platformVar + '(&&\\\\(0,\\\\w+\\\\.(?:jsx|createElement)\\\\)\\\\(\\\\w+)', 'g');
+const newCode = code.replace(gateRe, '\$1!0\$2');
+
+if (newCode === code) {
+  console.error('Warning: no gated JSX calls found for ' + platformVar + ' in desktop_shell.js');
+  console.error('Caption buttons may not appear on Linux');
+} else {
+  const count = (code.match(gateRe) || []).length;
+  fs.writeFileSync('$shell_js', newCode);
+  console.log('Caption buttons enabled on Linux (' + count + ' gate(s) replaced, var: ' + platformVar + ')');
+}
+"
 		echo "Patched $shell_js"
 	fi
-
-	# Inject CSS to hide Windows caption buttons (minimize/maximize/close)
-	# but keep the app menu dropdown button visible on Linux
-	local shell_html='app.asar.contents/shell.html'
-	if [[ -f $shell_html ]]; then
-		sed -i 's|</head>|<style>\
-#__MINIMIZE_CAPTION_BUTTON__,\
-#__MAXIMIZE_CAPTION_BUTTON__,\
-#__CLOSE_CAPTION_BUTTON__ { display: none !important; }\
-</style>\
-</head>|' "$shell_html"
-		echo "Patched $shell_html: hidden Windows caption buttons via CSS"
-	fi
+	# NOTE: CSS hiding of caption buttons removed — frame-fix-wrapper.js injects it
+	# dynamically only when FIGMA_USE_NATIVE_FRAME=1 is set at runtime.
 
 	# ---- Update package.json ----
 	echo 'Modifying package.json to load frame fix...'
@@ -864,14 +864,27 @@ if (code.includes(oldCode)) {
 const fs = require('fs');
 let code = fs.readFileSync('$main_js', 'utf8');
 
-// Find the tray init pattern and add setContextMenu after setToolTip
-const oldTray = 'this.electronTray.setToolTip(ne.name),this.electronTray.on(\"right-click\",()=>{var r;(r=this.electronTray)==null||r.popUpContextMenu(qSt())})';
-const newTray = 'this.electronTray.setToolTip(ne.name),this.electronTray.setContextMenu(qSt()),this.electronTray.on(\"right-click\",()=>{var r;(r=this.electronTray)==null||r.popUpContextMenu(qSt())})';
+// Find tray init: setToolTip(...), [tray].on('right-click', () => { popUpContextMenu(menuFn()) })
+// Use regex so variable names (ne, qSt, etc.) can change between Figma versions.
+// Captures: (1) tray var, (2) name var, (3) right-click handler var, (4) menu function name
+const trayPattern = /(this\.electronTray)\.setToolTip\((\w+\.\w+)\),(this\.electronTray)\.on\(\"right-click\",\(\)=>\{(?:var \w+;)?\(\w+=[\w.]+\)==null\|\|[\w.]+\.popUpContextMenu\((\w+)\(\)\)\}\)/;
+const match = code.match(trayPattern);
 
-if (code.includes(oldTray)) {
-  code = code.replace(oldTray, newTray);
+if (match) {
+  const trayVar = match[3];
+  const menuFn = match[4];
+  // setContextMenu: registers the menu with appindicator — left-click shows it on GNOME/KDE.
+  // on-click popup: on X11 systray (no appindicator), 'click' fires but the menu
+  // doesn't show automatically. Explicitly call popUpContextMenu() on 'click' so
+  // left-click opens the context menu on all Linux tray implementations.
+  const clickMenu = trayVar + '.on(\"click\",()=>{var t;(t=' + trayVar + ')==null||t.popUpContextMenu(' + menuFn + '())})';
+  const patched = match[0].replace(
+    trayVar + '.on(\"right-click\"',
+    trayVar + '.setContextMenu(' + menuFn + '()),' + clickMenu + ',' + trayVar + '.on(\"right-click\"'
+  );
+  code = code.replace(match[0], patched);
   fs.writeFileSync('$main_js', code);
-  console.log('Tray context menu patched: added setContextMenu(qSt()) for Linux');
+  console.log('Tray patched: setContextMenu + left-click popup menu added for Linux');
 } else {
   console.error('Warning: Tray context menu pattern not found - Figma may have updated');
   console.error('Right-click on tray icon may not show context menu on Linux');
