@@ -45,11 +45,13 @@ const DE_RADIUS = {
 // These are injected into the shell (tab bar) renderer.
 const DE_CAPTION_CSS = {
 	gnome: `
-		/* GNOME Adwaita caption buttons */
+		/* GNOME Adwaita caption buttons.
+		   Adwaita has NO coloured buttons — that's macOS.
+		   All buttons are flat, same style, subtle hover circle. */
 		.tab_bar--captionContainer--87q2H {
 			display: flex;
 			align-items: center;
-			gap: 6px;
+			gap: 4px;
 			padding: 0 8px;
 		}
 		.tab_bar--captionButton--JvJqp {
@@ -65,22 +67,14 @@ const DE_CAPTION_CSS = {
 			cursor: default;
 		}
 		.tab_bar--captionButton--JvJqp:hover {
-			background: rgba(0,0,0,0.12);
+			background: rgba(0,0,0,0.10);
+		}
+		.tab_bar--captionButton--JvJqp:active {
+			background: rgba(0,0,0,0.20);
 		}
 		.tab_bar--captionButton--JvJqp svg path {
 			fill: currentColor;
-			fill-opacity: 0.7;
-		}
-		/* Close button: Adwaita red */
-		.tab_bar--closeCaptionButton--Drt6v {
-			background: #c01c28 !important;
-		}
-		.tab_bar--closeCaptionButton--Drt6v:hover {
-			background: #e01b24 !important;
-		}
-		.tab_bar--closeCaptionButton--Drt6v svg path {
-			fill: #fff !important;
-			fill-opacity: 1 !important;
+			fill-opacity: 0.65;
 		}
 	`,
 
@@ -139,24 +133,26 @@ const DE_CAPTION_CSS = {
 	`,
 
 	cinnamon: `
-		/* Cinnamon: similar to GNOME but smaller radius */
+		/* Cinnamon: flat buttons, close gets red on hover (Mint theme default) */
 		.tab_bar--captionButton--JvJqp {
 			width: 24px;
 			height: 24px;
 			border-radius: 4px;
 			background: transparent;
 			border: none;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			transition: background 0.1s;
+			cursor: default;
 		}
 		.tab_bar--captionButton--JvJqp:hover {
 			background: rgba(0,0,0,0.12);
 		}
-		.tab_bar--closeCaptionButton--Drt6v {
+		.tab_bar--closeCaptionButton--Drt6v:hover {
 			background: #c0392b !important;
 		}
-		.tab_bar--closeCaptionButton--Drt6v:hover {
-			background: #e74c3c !important;
-		}
-		.tab_bar--closeCaptionButton--Drt6v svg path {
+		.tab_bar--closeCaptionButton--Drt6v:hover svg path {
 			fill: #fff !important;
 			fill-opacity: 1 !important;
 		}
