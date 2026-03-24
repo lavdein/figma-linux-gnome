@@ -1,12 +1,22 @@
 # Future Work Notes
 
-## `scripts/de-style-patch.js` — готов, не подключён к билду
+## Готовые модули (не подключены к билду)
 
-Файл написан, самодостаточен. Чтобы активировать — добавить в `frame-fix-wrapper.js`:
+### `scripts/de-style-patch.js` — CSS стили кнопок + tray window
+### `scripts/de-icons-patch.js` — замена SVG иконок на системные
+
+Подключить в `frame-fix-wrapper.js`:
 
 ```js
-// После перехвата require('electron') и получения модуля:
-require('./de-style-patch').apply(electron);
+const deStyle = require('./de-style-patch');
+const deIcons = require('./de-icons-patch');
+
+// после определения de:
+deIcons.init(de);         // резолвит иконки из /usr/share/icons/THEME/ или fallback
+
+// в app.on('web-contents-created', (_, wc) => { wc.on('dom-ready', () => { ... }) }):
+deStyle.apply(electron);  // CSS: форма кнопок, hover, border-radius tray-окна
+deIcons.applyToWebContents(wc);  // JS: заменяет SVG пути в кнопках
 ```
 
 Для `patchTrayPosition` — вызывать при создании трея (нужен доступ к инстансу `tray` и геттеру tray-окна).
