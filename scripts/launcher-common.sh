@@ -48,11 +48,8 @@ build_electron_args() {
 	# AppImage always needs --no-sandbox due to FUSE constraints
 	[[ $package_type == 'appimage' ]] && electron_args+=('--no-sandbox')
 
-	# Disable CustomTitlebar only when используем нативный системный фрейм
-	# Если FIGMA_USE_NATIVE_FRAME=0/false, оставляем фирменный заголовок Figma
-	if [[ ${FIGMA_USE_NATIVE_FRAME:-1} != '0' && ${FIGMA_USE_NATIVE_FRAME,,} != 'false' ]]; then
-		electron_args+=('--disable-features=CustomTitlebar')
-	fi
+	# Disable CustomTitlebar for better Linux integration
+	electron_args+=('--disable-features=CustomTitlebar')
 
 	# X11 session - no special flags needed
 	if [[ $is_wayland != true ]]; then
@@ -80,17 +77,5 @@ build_electron_args() {
 # Set common environment variables
 setup_electron_env() {
 	export ELECTRON_FORCE_IS_PACKAGED=true
-
-	# Управляем системным/кастомным заголовком через FIGMA_USE_NATIVE_FRAME:
-	# - по умолчанию (переменная не задана или не 0/false) используем системный фрейм
-	# - при FIGMA_USE_NATIVE_FRAME=0/false отдаём управление самой Figma (кастомный заголовок)
-	if [[ ${FIGMA_USE_NATIVE_FRAME:-1} == '0' || ${FIGMA_USE_NATIVE_FRAME,,} == 'false' ]]; then
-		# Явно выключаем системный заголовок
-		export ELECTRON_USE_SYSTEM_TITLE_BAR=0
-	else
-		# Если пользователь явно не переопределил, включаем системный заголовок
-		if [[ -z ${ELECTRON_USE_SYSTEM_TITLE_BAR+x} ]]; then
-			export ELECTRON_USE_SYSTEM_TITLE_BAR=1
-		fi
-	fi
+	export ELECTRON_USE_SYSTEM_TITLE_BAR=1
 }

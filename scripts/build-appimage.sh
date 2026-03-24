@@ -123,8 +123,10 @@ DESKTOP
 	fi
 }
 
-# Run desktop integration (non-blocking, errors are non-fatal)
-integrate_desktop 2>/dev/null || true
+# Desktop integration is opt-in: set FIGMA_INTEGRATE_DESKTOP=1 to register
+# the .desktop file and figma:// URL scheme handler automatically on launch.
+# By default the AppImage does not create shortcuts or modify system files.
+[[ ${FIGMA_INTEGRATE_DESKTOP:-0} == '1' ]] && integrate_desktop 2>/dev/null || true
 
 # Detect display backend
 detect_display_backend
