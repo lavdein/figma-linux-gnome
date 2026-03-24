@@ -641,6 +641,8 @@ patch_app_asar() {
 	echo "Original main entry: $original_main"
 
 	cp "$project_root/scripts/frame-fix-wrapper.js" app.asar.contents/frame-fix-wrapper.js || exit 1
+	cp "$project_root/scripts/de-style-patch.js"   app.asar.contents/de-style-patch.js   || exit 1
+	cp "$project_root/scripts/de-icons-patch.js"   app.asar.contents/de-icons-patch.js   || exit 1
 
 	cat > app.asar.contents/frame-fix-entry.js << EOFENTRY
 // Load frame fix first

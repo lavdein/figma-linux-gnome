@@ -2,6 +2,11 @@
 const Module = require('module');
 const originalRequire = Module.prototype.require;
 
+// DE-aware patches (loaded here, applied after electron is intercepted)
+const deStyle = require('./de-style-patch');
+const deIcons = require('./de-icons-patch');
+deIcons.init(deStyle.de);
+
 const WIN_USER_AGENT =
 	process.env.FIGMA_USER_AGENT_OVERRIDE ||
 	'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.7559.220 Safari/537.36';
@@ -23,6 +28,7 @@ Module.prototype.require = function(id) {
 		// Override UA so Local Fonts Agent accepts us as a Windows client
 		if (process.platform === 'linux' && module.app && !module.app.__figma_linux_patched) {
 			module.app.__figma_linux_patched = true;
+			deStyle.apply(module);
 
 			module.app.on('ready', () => {
 				if (module.session && module.session.defaultSession) {
@@ -35,6 +41,10 @@ Module.prototype.require = function(id) {
 				webContents.session.webRequest.onBeforeSendHeaders((details, callback) => {
 					details.requestHeaders['User-Agent'] = WIN_USER_AGENT;
 					callback({ requestHeaders: details.requestHeaders });
+				});
+
+				webContents.on('dom-ready', () => {
+					deIcons.applyToWebContents(webContents);
 				});
 			});
 		}
