@@ -3,3 +3,7 @@
 build/
 figma-desktop*.AppImage
 figma-desktop*.deb
+.trash/
+.knwlg/
+FigmaSetup.exe
+frame-fix-entry.js

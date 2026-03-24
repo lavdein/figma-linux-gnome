@@ -45,36 +45,78 @@ const DE_RADIUS = {
 // These are injected into the shell (tab bar) renderer.
 const DE_CAPTION_CSS = {
 	gnome: `
-		/* GNOME Adwaita caption buttons.
-		   Adwaita has NO coloured buttons — that's macOS.
-		   All buttons are flat, same style, subtle hover circle. */
+		/* GNOME Adwaita caption buttons — flat, theme-token-based, CSS icon masks */
 		.tab_bar--captionContainer--87q2H {
 			display: flex;
 			align-items: center;
-			gap: 4px;
-			padding: 0 8px;
+			gap: 12px !important;
+			padding: 0 12px !important;
+			height: 100%;
 		}
 		.tab_bar--captionButton--JvJqp {
-			width: 24px;
-			height: 24px;
-			border-radius: 50%;
-			background: transparent;
-			border: none;
 			display: flex;
 			align-items: center;
 			justify-content: center;
-			transition: background 0.1s;
+			width: 24px !important;
+			height: 24px !important;
+			border: none !important;
+			background-color: var(--color-bg-transparent) !important;
+			color: var(--color-icon) !important;
+			border-radius: var(--radius-full) !important;
 			cursor: default;
+			transition: background-color var(--duration-sm) ease, color var(--duration-sm) ease;
 		}
 		.tab_bar--captionButton--JvJqp:hover {
-			background: rgba(0,0,0,0.10);
+			background-color: var(--color-bg-transparent-pressed) !important;
+			color: var(--color-icon-hover) !important;
 		}
 		.tab_bar--captionButton--JvJqp:active {
-			background: rgba(0,0,0,0.20);
+			background-color: var(--color-bg-secondary-pressed) !important;
 		}
-		.tab_bar--captionButton--JvJqp svg path {
-			fill: currentColor;
-			fill-opacity: 0.65;
+		.tab_bar--closeCaptionButton--Drt6v:hover {
+			background-color: var(--color-bg-danger-hover) !important;
+			color: var(--color-icon-ondanger) !important;
+		}
+		.tab_bar--closeCaptionButton--Drt6v:active {
+			background-color: var(--color-bg-danger-pressed) !important;
+			color: var(--color-icon-ondanger) !important;
+		}
+		.tab_bar--captionButton--JvJqp:focus-visible {
+			outline: 2px solid var(--color-border-selected) !important;
+			outline-offset: -2px;
+		}
+		/* Hide original SVGs, replace with CSS mask icons */
+		.tab_bar--captionButton--JvJqp .svg {
+			display: none !important;
+		}
+		.tab_bar--captionButton--JvJqp .svg-container::after {
+			content: "";
+			display: block;
+			width: 16px;
+			height: 16px;
+			background-color: currentColor;
+			-webkit-mask-size: contain;
+			-webkit-mask-repeat: no-repeat;
+			-webkit-mask-position: center;
+			mask-size: contain;
+			mask-repeat: no-repeat;
+			mask-position: center;
+		}
+		#__MENU_CAPTION_BUTTON__ .svg-container::after {
+			-webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 4h10M3 8h10M3 12h10' stroke='black' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+			mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 4h10M3 8h10M3 12h10' stroke='black' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+		}
+		#__MINIMIZE_CAPTION_BUTTON__ .svg-container::after {
+			-webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 8h8' stroke='black' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+			mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 8h8' stroke='black' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+		}
+		#__MAXIMIZE_CAPTION_BUTTON__ .svg-container::after {
+			-webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect x='3.5' y='3.5' width='9' height='9' rx='1.5' stroke='black' stroke-width='1.5' fill='none'/%3E%3C/svg%3E");
+			mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect x='3.5' y='3.5' width='9' height='9' rx='1.5' stroke='black' stroke-width='1.5' fill='none'/%3E%3C/svg%3E");
+		}
+		#__CLOSE_CAPTION_BUTTON__ .svg-container::after {
+			-webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4.5 4.5l7 7m0-7l-7 7' stroke='black' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+			mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4.5 4.5l7 7m0-7l-7 7' stroke='black' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
 		}
 	`,
 
@@ -173,6 +215,30 @@ const DE_CAPTION_CSS = {
 };
 
 // ---------------------------------------------------------------------------
+// Main window CSS: rounded corners per DE (requires transparent: true in BrowserWindow)
+// ---------------------------------------------------------------------------
+
+const DE_MAIN_RADIUS = {
+	gnome:    '12px',
+	kde:      '8px',
+	xfce:     '4px',
+	cinnamon: '6px',
+	generic:  '0px',
+};
+
+// Window rounding via transparent BrowserWindow + CSS clip-path.
+// Disabled for now — Figma's shell WebContentsView has no opaque background,
+// making the transparent approach unreliable. Returns '' so frame-fix-wrapper.js
+// does NOT enable transparent:true on the BrowserWindow.
+function buildMainWindowCSS(_de) {
+	return '';
+}
+
+function buildCanvasWindowCSS(_de) {
+	return '';
+}
+
+// ---------------------------------------------------------------------------
 // Tray window CSS: shadow + border-radius per DE
 // ---------------------------------------------------------------------------
 
@@ -262,26 +328,24 @@ console.log(`[DE Patch] Detected desktop environment: ${de}`);
  * @param {object} electron  - the electron module
  */
 function apply(electron) {
-	const { app, BrowserWindow, screen } = electron;
+	const { app } = electron;
 	if (!app) return;
 
-	const captionCSS  = (DE_CAPTION_CSS[de] || DE_CAPTION_CSS.generic).replace(/\n\s+/g, ' ');
-	const trayCSS     = buildTrayWindowCSS(de);
+	const captionCSS = (DE_CAPTION_CSS[de] || DE_CAPTION_CSS.generic).replace(/\n\s+/g, ' ');
+	const trayCSS    = buildTrayWindowCSS(de);
 
 	app.on('web-contents-created', (_event, wc) => {
 		wc.on('dom-ready', () => {
 			const url = wc.getURL();
+			const isTrayUrl  = url.includes('tray') || url.includes('feed') || url.includes('notification');
+			const isShellUrl = url.includes('shell.html') || url.includes('desktop_shell');
 
-			// Shell window — inject caption button styles
-			if (url.includes('shell.html') || url.includes('desktop_shell')) {
+			if (isShellUrl) {
 				wc.insertCSS(captionCSS).catch(() => {});
-				console.log('[DE Patch] Caption button CSS injected into shell');
-			}
-
-			// Tray notification window — inject shadow/radius fixes
-			if (url.includes('tray') || url.includes('feed') || url.includes('notification')) {
+				console.log('[DE Patch] Caption CSS injected into shell');
+			} else if (isTrayUrl) {
 				wc.insertCSS(trayCSS).catch(() => {});
-				console.log('[DE Patch] Tray window CSS injected');
+				console.log('[DE Patch] Tray CSS injected');
 			}
 		});
 	});
@@ -289,4 +353,4 @@ function apply(electron) {
 	console.log(`[DE Patch] applied (de=${de})`);
 }
 
-module.exports = { apply, detectDE, patchTrayPosition, de, DE_RADIUS, DE_CAPTION_CSS };
+module.exports = { apply, detectDE, patchTrayPosition, buildMainWindowCSS, buildCanvasWindowCSS, de, DE_RADIUS, DE_MAIN_RADIUS, DE_CAPTION_CSS };
