@@ -8,6 +8,48 @@ try {
 	// May fail in utility process where electron main APIs aren't available
 }
 
+// Optional integration with external font agent (e.g. figma-agent-linux).
+// Вызов делаем синхронно через spawnSync(curl ...), чтобы не ломать ожидания
+// Figma от desktop_rust.getFonts (синхронный API).
+const { spawnSync } = require('child_process');
+
+let cachedFontsJson = null;
+let cachedFontsTimestamp = 0;
+const FONTS_CACHE_TTL_MS = 60_000;
+
+function getFontsFromExternalAgent() {
+	const now = Date.now();
+	if (cachedFontsJson && now - cachedFontsTimestamp < FONTS_CACHE_TTL_MS) {
+		return cachedFontsJson;
+	}
+
+	const endpoint =
+		process.env.FIGMA_FONT_AGENT_URL ||
+		'http://127.0.0.1:44950/figma/font-files';
+
+	try {
+		const result = spawnSync('curl', ['-fsSL', endpoint], {
+			encoding: 'utf8',
+			timeout: 2_000,
+		});
+
+		if (
+			result.status === 0 &&
+			typeof result.stdout === 'string' &&
+			result.stdout.trim().startsWith('{')
+		) {
+			cachedFontsJson = result.stdout;
+			cachedFontsTimestamp = now;
+			return cachedFontsJson;
+		}
+	} catch (_err) {
+		// If anything goes wrong (no curl, no agent, timeout),
+		// fall back to previous cache or empty object.
+	}
+
+	return cachedFontsJson || JSON.stringify({});
+}
+
 // ---- bindings.node stubs ----
 // All methods that xe.* references in main.js
 
@@ -77,7 +119,7 @@ module.exports = {
 // Provides font enumeration on Windows/macOS via native Rust code
 module.exports.desktop_rust = {
 	// Font enumeration - returns JSON string of font data
-	getFonts: () => JSON.stringify({}),
+	getFonts: () => getFontsFromExternalAgent(),
 	// Returns timestamp of last font modification
 	getFontsModifiedAt: () => 0,
 	// Returns JSON string of fonts modified since last check

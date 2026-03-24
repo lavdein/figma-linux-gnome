@@ -650,18 +650,26 @@ require('./${original_main}');
 EOFENTRY
 
 	# ---- Patch BrowserWindow creation in main.js ----
-	echo 'Patching BrowserWindow creation for native frames...'
 	local main_js='app.asar.contents/main.js'
+	# Allow disabling native frame patches via FIGMA_USE_NATIVE_FRAME=0/false
+	local patch_native_frame=true
+	if [[ ${FIGMA_USE_NATIVE_FRAME:-1} == '0' || ${FIGMA_USE_NATIVE_FRAME,,} == 'false' ]]; then
+		patch_native_frame=false
+	fi
+
 	if [[ -f $main_js ]]; then
-		# frame:!1 -> frame:true (minified false)
-		sed -i 's/frame:!1/frame:true/g' "$main_js"
-		# frame:!0 -> frame:true (minified true with NOT, i.e. false)
-		sed -i 's/frame:!0/frame:true/g' "$main_js"
-		# frame:false -> frame:true
-		sed -i 's/frame[[:space:]]*:[[:space:]]*false/frame:true/g' "$main_js"
-		# Remove titleBarStyle:"hidden"
-		sed -i 's/titleBarStyle:"hidden"/titleBarStyle:"default"/g' "$main_js"
-		echo "Patched $main_js for native frames"
+		if [[ $patch_native_frame == true ]]; then
+			echo 'Patching BrowserWindow creation for native frames...'
+			# frame:!1 -> frame:true (minified false)
+			sed -i 's/frame:!1/frame:true/g' "$main_js"
+			# frame:!0 -> frame:true (minified true with NOT, i.e. false)
+			sed -i 's/frame:!0/frame:true/g' "$main_js"
+			# frame:false -> frame:true
+			sed -i 's/frame[[:space:]]*:[[:space:]]*false/frame:true/g' "$main_js"
+			# Remove titleBarStyle:"hidden"
+			sed -i 's/titleBarStyle:"hidden"/titleBarStyle:"default"/g' "$main_js"
+			echo "Patched $main_js for native frames"
+		fi
 
 		# ---- Patch openFile to allow duplicate tabs (with tray toggle + persistent state) ----
 		# Adds a toggle to tray menu that persists across restarts using Figma's
@@ -741,13 +749,17 @@ console.log('Duplicate tabs patch applied (' + patched + '/5 patches)');
 	# Also patch desktop_shell.js if it has BrowserWindow references
 	local shell_js='app.asar.contents/desktop_shell.js'
 	if [[ -f $shell_js ]]; then
-		sed -i 's/frame:!1/frame:true/g' "$shell_js"
-		sed -i 's/frame:!0/frame:true/g' "$shell_js"
+		# Только в режиме нативного фрейма (FIGMA_USE_NATIVE_FRAME!=0/false)
+		# форсим frame:true внутри desktop_shell.js
+		if [[ $patch_native_frame == true ]]; then
+			sed -i 's/frame:!1/frame:true/g' "$shell_js"
+			sed -i 's/frame:!0/frame:true/g' "$shell_js"
+		fi
 
 		# Show the app menu dropdown button on Linux (normally Windows-only).
 		# The caption container (menu + minimize/maximize/close) is gated behind
-		# a tS="win32"===e.platform check. We force render it, then hide the
-		# window control buttons via CSS — keeping only the menu dropdown.
+		# a tS="win32"===e.platform check. We force render it so меню работало
+		# и на Linux, а уже внешним видом управляем через CSS ниже.
 		sed -i 's|i=tS&&(0,p.jsx)(em|i=!0\&\&(0,p.jsx)(em|' "$shell_js"
 		if grep -q 'i=!0&&(0,p.jsx)(em' "$shell_js"; then
 			echo "Patched $shell_js: app menu button enabled on Linux"
@@ -762,13 +774,18 @@ console.log('Duplicate tabs patch applied (' + patched + '/5 patches)');
 	# but keep the app menu dropdown button visible on Linux
 	local shell_html='app.asar.contents/shell.html'
 	if [[ -f $shell_html ]]; then
-		sed -i 's|</head>|<style>\
+		if [[ $patch_native_frame == true ]]; then
+			# В режиме нативного фрейма прячем дубль кнопок в кастомном заголовке
+			sed -i 's|</head>|<style>\
 #__MINIMIZE_CAPTION_BUTTON__,\
 #__MAXIMIZE_CAPTION_BUTTON__,\
 #__CLOSE_CAPTION_BUTTON__ { display: none !important; }\
 </style>\
 </head>|' "$shell_html"
-		echo "Patched $shell_html: hidden Windows caption buttons via CSS"
+			echo "Patched $shell_html: hidden Windows caption buttons via CSS"
+		else
+			echo "Skipping caption button CSS patch for custom title bar mode"
+		fi
 	fi
 
 	# ---- Update package.json ----

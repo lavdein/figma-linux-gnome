@@ -294,8 +294,8 @@ output_path="$work_dir/$output_filename"
 export ARCH="$architecture"
 echo "Using ARCH=$ARCH"
 
-echo 'Building AppImage without update information'
-if ! "$appimagetool_path" "$appdir_path" "$output_path"; then
+echo 'Building AppImage without update information (skipping AppStream validation)'
+if ! "$appimagetool_path" --no-appstream "$appdir_path" "$output_path"; then
 	echo "Failed to build AppImage using $appimagetool_path" >&2
 	exit 1
 fi
