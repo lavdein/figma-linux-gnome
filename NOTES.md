@@ -1,5 +1,17 @@
 # Future Work Notes
 
+## `scripts/de-style-patch.js` — готов, не подключён к билду
+
+Файл написан, самодостаточен. Чтобы активировать — добавить в `frame-fix-wrapper.js`:
+
+```js
+// После перехвата require('electron') и получения модуля:
+require('./de-style-patch').apply(electron);
+```
+
+Для `patchTrayPosition` — вызывать при создании трея (нужен доступ к инстансу `tray` и геттеру tray-окна).
+
+
 ## 1. Caption buttons: GNOME / KDE native styling
 
 The caption container renders Figma's own Windows-style SVG icons:
