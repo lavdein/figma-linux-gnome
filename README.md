@@ -4,6 +4,20 @@ Run the **real** Figma Desktop app on Linux — not a browser wrapper, not a web
 
 This project extracts the official Figma Desktop Windows installer, patches it for Linux compatibility, and packages it as an **AppImage**, **.deb**, or **.rpm**. You get everything the Windows/macOS client has: system tray icon, `figma://` protocol handling, MCP server support, native window frames, and offline file opening.
 
+---
+
+## GNOME / Linux DE patches
+
+This fork includes additional patches for native look and feel on GNOME and other desktop environments.
+
+| | Dark | Light |
+|---|---|---|
+| Adwaita caption buttons | ![dark](assets/gnome-dark.png) | ![light](assets/gnome-light.png) |
+
+👉 **[Подробнее об особенностях форка → README_RU.md](README_RU.md)**
+
+---
+
 ## Why This Exists
 
 Every other "Figma for Linux" project is just a browser window pretending to be a desktop app. This one is different:
