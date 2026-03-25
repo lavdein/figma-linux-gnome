@@ -9,44 +9,46 @@ try {
 }
 
 // Optional integration with external font agent (e.g. figma-agent-linux).
-// Вызов делаем синхронно через spawnSync(curl ...), чтобы не ломать ожидания
-// Figma от desktop_rust.getFonts (синхронный API).
-const { spawnSync } = require('child_process');
+// getFonts() is a sync API so we always return from cache immediately;
+// a background http.get keeps the cache fresh — no blocking, no curl dep.
+const http = require('http');
+
+const FONT_AGENT_URL = process.env.FIGMA_FONT_AGENT_URL || 'http://127.0.0.1:44950/figma/font-files';
+const FONTS_CACHE_TTL_MS = 60_000;
 
 let cachedFontsJson = null;
 let cachedFontsTimestamp = 0;
-const FONTS_CACHE_TTL_MS = 60_000;
+let fetchInProgress = false;
+
+function fetchFontsInBackground() {
+	if (fetchInProgress) return;
+	fetchInProgress = true;
+	try {
+		const req = http.get(FONT_AGENT_URL, { timeout: 2000 }, (res) => {
+			let data = '';
+			res.on('data', (chunk) => { data += chunk; });
+			res.on('end', () => {
+				fetchInProgress = false;
+				if (res.statusCode === 200 && data.trim().startsWith('{')) {
+					cachedFontsJson = data;
+					cachedFontsTimestamp = Date.now();
+				}
+			});
+		});
+		req.on('error', () => { fetchInProgress = false; });
+		req.on('timeout', () => { req.destroy(); fetchInProgress = false; });
+	} catch (_err) {
+		fetchInProgress = false;
+	}
+}
+
+// Pre-fetch at startup so fonts are ready by the time Figma first calls getFonts()
+fetchFontsInBackground();
 
 function getFontsFromExternalAgent() {
-	const now = Date.now();
-	if (cachedFontsJson && now - cachedFontsTimestamp < FONTS_CACHE_TTL_MS) {
-		return cachedFontsJson;
+	if (!cachedFontsJson || Date.now() - cachedFontsTimestamp >= FONTS_CACHE_TTL_MS) {
+		fetchFontsInBackground();
 	}
-
-	const endpoint =
-		process.env.FIGMA_FONT_AGENT_URL ||
-		'http://127.0.0.1:44950/figma/font-files';
-
-	try {
-		const result = spawnSync('curl', ['-fsSL', endpoint], {
-			encoding: 'utf8',
-			timeout: 2_000,
-		});
-
-		if (
-			result.status === 0 &&
-			typeof result.stdout === 'string' &&
-			result.stdout.trim().startsWith('{')
-		) {
-			cachedFontsJson = result.stdout;
-			cachedFontsTimestamp = now;
-			return cachedFontsJson;
-		}
-	} catch (_err) {
-		// If anything goes wrong (no curl, no agent, timeout),
-		// fall back to previous cache or empty object.
-	}
-
 	return cachedFontsJson || JSON.stringify({});
 }
 

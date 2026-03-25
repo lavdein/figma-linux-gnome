@@ -9,9 +9,10 @@ deIcons.init(deStyle.de);
 
 const MAIN_WINDOW_CSS = deStyle.buildMainWindowCSS(deStyle.de);
 
+// Only spoof the OS identifier — Chrome version stays in sync with bundled Electron.
 const WIN_USER_AGENT =
 	process.env.FIGMA_USER_AGENT_OVERRIDE ||
-	'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.7559.220 Safari/537.36';
+	`Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${process.versions.chrome || '130.0.0.0'} Safari/537.36`;
 
 // Set FIGMA_USE_NATIVE_FRAME=1 to use native Linux window decorations.
 const useNativeFrame = process.env.FIGMA_USE_NATIVE_FRAME === '1';
@@ -252,9 +253,16 @@ Module.prototype.require = function(id) {
 						callback({ requestHeaders: details.requestHeaders });
 					});
 
-					webContents.on('dom-ready', () => {
-						deIcons.applyToWebContents(webContents);
-					});
+					// GNOME uses CSS mask icons via de-style-patch.js — no JS injection needed.
+					// For other DEs, only inject into the main shell, not tray/sub-frames.
+					if (deStyle.de !== 'gnome') {
+						webContents.on('dom-ready', () => {
+							const url = webContents.getURL();
+							if (url.includes('shell.html') || url.includes('desktop_shell') || url.includes('figma.com')) {
+								deIcons.applyToWebContents(webContents);
+							}
+						});
+					}
 				});
 			}
 
@@ -262,13 +270,11 @@ Module.prototype.require = function(id) {
 			if (OriginalMenu && !OriginalMenu.__figma_patched) {
 				const originalSetAppMenu = OriginalMenu.setApplicationMenu.bind(OriginalMenu);
 				realModule.Menu.setApplicationMenu = function(menu) {
-					console.log('[Frame Fix] Intercepting setApplicationMenu');
 					originalSetAppMenu(menu);
 					if (process.platform === 'linux') {
 						for (const win of OriginalBrowserWindow.getAllWindows()) {
 							win.setMenuBarVisibility(false);
 						}
-						console.log('[Frame Fix] Menu bar hidden on all windows');
 					}
 				};
 				OriginalMenu.__figma_patched = true;
