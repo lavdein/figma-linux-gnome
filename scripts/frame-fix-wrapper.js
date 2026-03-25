@@ -77,6 +77,11 @@ function buildBrowserWindowWithFrame(OriginalBrowserWindow) {
 			if (process.platform === 'linux' && !isTrayWindow) {
 				this.setMenuBarVisibility(false);
 
+				// Keep menu bar hidden after every show event
+				this.on('show', () => {
+					this.setMenuBarVisibility(false);
+				});
+
 				if (useNativeFrame) {
 					// Hide Figma's own caption buttons — native frame provides its own
 					this.webContents.on('dom-ready', () => {
@@ -92,6 +97,96 @@ function buildBrowserWindowWithFrame(OriginalBrowserWindow) {
 						this.webContents.insertCSS(MAIN_WINDOW_CSS).catch(() => {});
 					});
 				}
+
+				// Wayland resize fix: patch getContentBounds() to bypass Chromium's stale
+				// LayoutManagerBase cache. The cache only updates on _NET_WM_STATE changes,
+				// which KWin tiling and Wayland compositors skip. getSize() is always fresh.
+				let frameW = 0;
+				let frameH = 0;
+				let calibrated = false;
+				const origGetContentBounds = this.getContentBounds.bind(this);
+
+				this.getContentBounds = () => {
+					if (calibrated && !this.isDestroyed()) {
+						const [w, h] = this.getSize();
+						const width = w - frameW;
+						const height = h - frameH;
+						// Guard against stale data during transitions
+						if (width > 0 && height > 0) {
+							return { x: 0, y: 0, width, height };
+						}
+					}
+					return origGetContentBounds();
+				};
+
+				// Re-emit resize after state transitions so Figma recalculates child views
+				const reemitResize = () => {
+					if (this.isDestroyed()) return;
+					this.emit('resize');
+					setTimeout(() => {
+						if (!this.isDestroyed()) this.emit('resize');
+					}, 16);
+				};
+
+				this.on('maximize', reemitResize);
+				this.on('unmaximize', reemitResize);
+				this.on('enter-full-screen', reemitResize);
+				this.on('leave-full-screen', reemitResize);
+
+				this.once('ready-to-show', () => {
+					this.setMenuBarVisibility(false);
+					if (useNativeFrame) {
+						// One-time size jiggle forces Chromium layout cache flush.
+						// Skipped for frameless/transparent windows to avoid visual flash.
+						const [w, h] = this.getSize();
+						this.setSize(w + 1, h + 1);
+						setTimeout(() => {
+							if (this.isDestroyed()) return;
+							this.setSize(w, h);
+							// Calibrate frame overhead at rest: diff between window size and content bounds.
+							// Under XWayland/Wayland, frame overhead is typically 0x0.
+							setTimeout(() => {
+								if (this.isDestroyed()) return;
+								const [winW, winH] = this.getSize();
+								const cb = origGetContentBounds();
+								const fw = winW - cb.width;
+								const fh = winH - cb.height;
+								if (cb.width > 0 && cb.height > 0 && fw >= 0 && fh >= 0 && fw < 200 && fh < 200) {
+									frameW = fw;
+									frameH = fh;
+									calibrated = true;
+									console.log(`[Frame Fix] Frame overhead calibrated: ${fw}x${fh}`);
+								} else {
+									frameW = 0;
+									frameH = 0;
+									calibrated = true;
+									console.log(`[Frame Fix] Calibration fallback. win=${winW}x${winH} content=${cb.width}x${cb.height}`);
+								}
+							}, 100);
+						}, 50);
+					} else {
+						// Frameless/transparent: no frame overhead to calibrate
+						calibrated = true;
+					}
+				});
+
+				// Fallback calibration if ready-to-show doesn't fire
+				this.once('show', () => {
+					setTimeout(() => {
+						if (this.isDestroyed() || calibrated) return;
+						console.log('[Frame Fix] Fallback calibration via show event');
+						const [winW, winH] = this.getSize();
+						const cb = origGetContentBounds();
+						const fw = winW - cb.width;
+						const fh = winH - cb.height;
+						if (cb.width > 0 && cb.height > 0 && fw >= 0 && fh >= 0 && fw < 200 && fh < 200) {
+							frameW = fw;
+							frameH = fh;
+						}
+						calibrated = true;
+						console.log(`[Frame Fix] Fallback calibrated: ${frameW}x${frameH}`);
+					}, 500);
+				});
 
 				if (process.env.FIGMA_DEBUG === '1') {
 					this.webContents.on('dom-ready', () => {

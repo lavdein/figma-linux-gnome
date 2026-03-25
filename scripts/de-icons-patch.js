@@ -120,19 +120,23 @@ const FALLBACK = {
 	},
 
 	kde: {
-		// Breeze window-close: bolder X, slightly rounded feel
-		close:    ['M4.293 3.293 3.293 4.293 7.293 8.293l-4 4 1 1 4-4 4 4 1-1-4-4 4-4-1-1-4 4z'],
-		// Breeze window-minimize: wider bar
+		// Exact paths from /usr/share/icons/breeze/actions/16/window-close.svg
+		// Two-layer X: thin guide lines + solid filled polygon
+		close: [
+			'm4 4 8 8m-8 0 8-8',
+			'M 4,3.1523438 3.1523438,4 7.1523437,8 3.1523438,12 4,12.847656 8,8.8476563 12,12.847656 12.847656,12 8.8476563,8 12.847656,4 12,3.1523438 8,7.1523437 Z',
+		],
+		// Breeze window-minimize: bottom-aligned bar (matching Adwaita position)
 		minimize: ['M2 10.5h12V12H2z'],
-		// Breeze window-maximize: double-stroke square (restore-looking)
+		// Breeze window-maximize: outer frame with inner square
 		maximize: ['M2 2v12h12V2zm1.5 1.5h9v9h-9z'],
-		// menu (same as gnome, breeze uses similar hamburger)
+		// Breeze open-menu: 3 bars at even spacing
 		menu:     ['M2 4h12v1.5H2zm0 4.75h12v1.5H2zm0 4.75h12v1.5H2z'],
 	},
 
 	generic: {
-		close:    ['M2 2l12 12m0-12L2 14'],   // fallback: plain X (will look odd, prefer system)
-		minimize: ['M2 8h12v1H2z'],
+		close:    ['M2 2l12 12m0-12L2 14'],
+		minimize: ['M2 10h12v2H2z'],
 		maximize: ['M2 2v12h12V2zm1 1h10v10H3z'],
 		menu:     ['M2 3.5h12v1H2zm0 5h12v1H2zm0 5h12v1H2z'],
 	},
